@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Lưu Trữ Lịch Sử Chat AI</title>
+    <!-- Tailwind CSS cho Giao diện Mobile-first -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Thư viện JSZip để nén file -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    
+    <style>
+        /* Tùy chỉnh thanh cuộn cho đẹp hơn */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+        
+        /* Hiệu ứng loading */
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #4f46e5;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 font-sans antialiased min-h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="bg-indigo-600 text-white p-4 shadow-md sticky top-0 z-10">
+        <div class="max-w-md mx-auto flex items-center justify-between">
+            <h1 class="text-xl font-bold flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                </svg>
+                AI Chat Saver
+            </h1>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 w-full max-w-md mx-auto p-4 flex flex-col gap-4">
+        
+        <!-- Hướng dẫn -->
+        <div class="bg-blue-50 border-l-4 border-blue-500 p-3 rounded-r-lg shadow-sm text-sm text-blue-800">
+            Dán các đường link public đoạn chat AI (ChatGPT, Claude...) vào bên dưới. Mỗi link trên một dòng.
+        </div>
+
+        <!-- Input Area -->
+        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+            <label for="linksInput" class="block text-sm font-semibold text-gray-700 mb-2">Danh sách Link chat:</label>
+            <textarea id="linksInput" rows="6" 
+                class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-sm"
+                placeholder="https://chatgpt.com/share/abc...&#10;https://claude.ai/chat/xyz..."></textarea>
+            
+            <button id="processBtn" onclick="processLinks()" 
+                class="mt-4 w-full bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold py-3 px-4 rounded-lg transition-colors flex justify-center items-center">
+                <span>Trích xuất nội dung</span>
+            </button>
+        </div>
+
+        <!-- Trạng thái xử lý -->
+        <div id="statusArea" class="hidden flex flex-col gap-2">
+            <h2 class="text-sm font-bold text-gray-600 uppercase tracking-wider">Trạng thái</h2>
+            <div id="logList" class="bg-white p-3 rounded-xl shadow-sm border border-gray-200 max-h-48 overflow-y-auto text-sm flex flex-col gap-2">
+                <!-- Logs sẽ xuất hiện ở đây -->
+            </div>
+        </div>
+
+        <!-- Download Actions -->
+        <div id="downloadArea" class="hidden bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex flex-col gap-3">
+            <h2 class="text-sm font-bold text-gray-600 uppercase tracking-wider mb-1">Tùy chọn tải về</h2>
+            
+            <button onclick="downloadZip()" class="w-full bg-green-500 hover:bg-green-600 active:bg-green-700 text-white font-bold py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                </svg>
+                Tải về 1 file .ZIP (Khuyên dùng)
+            </button>
+
+            <button onclick="downloadIndividualFiles()" class="w-full bg-gray-100 hover:bg-gray-200 active:bg-gray-300 text-gray-800 font-semibold py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2 border border-gray-300">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Tải từng file .TXT rời
+            </button>
+            <p class="text-xs text-gray-500 text-center mt-1">Lưu ý: Tải từng file có thể bị trình duyệt chặn pop-up nếu có quá nhiều file.</p>
+        </div>
+
+    </main>
+
+    <script>
+        // Mảng chứa dữ liệu đã trích xuất
+        let extractedChats = [];
+
+        async function processLinks() {
+            const input = document.getElementById('linksInput').value;
+            const processBtn = document.getElementById('processBtn');
+            const statusArea = document.getElementById('statusArea');
+            const logList = document.getElementById('logList');
+            const downloadArea = document.getElementById('downloadArea');
+
+            // Lọc các link hợp lệ (xóa dòng trống)
+            const links = input.split('\n').map(link => link.trim()).filter(link => link !== '');
+
+            if (links.length === 0) {
+                alert("Vui lòng nhập ít nhất 1 đường link hợp lệ!");
+                return;
+            }
+
+            // Reset UI
+            extractedChats = [];
+            logList.innerHTML = '';
+            statusArea.classList.remove('hidden');
+            downloadArea.classList.add('hidden');
+            processBtn.innerHTML = '<span class="loader"></span> Đang xử lý...';
+            processBtn.disabled = true;
+            processBtn.classList.add('opacity-70');
+
+            // Xử lý từng link
+            for (let i = 0; i < links.length; i++) {
+                const url = links[i];
+                const logItem = document.createElement('div');
+                logItem.className = 'flex items-center text-gray-600 gap-2';
+                logItem.innerHTML = `<span class="loader" style="width:14px;height:14px;border-width:2px;"></span> Đang đọc: <span class="truncate max-w-[200px]">${url}</span>`;
+                logList.appendChild(logItem);
+
+                // Cuộn xuống cuối log
+                logList.scrollTop = logList.scrollHeight;
+
+                try {
+                    // GIẢ LẬP GỌI API (MOCK API)
+                    // Ở bản thực tế, bạn sẽ dùng fetch() gọi đến Backend Của Bạn
+                    // Ví dụ: const response = await fetch(`https://api.cuaban.com/scrape?url=${encodeURIComponent(url)}`);
+                    const data = await mockFetchChatData(url, i + 1);
+                    
+                    extractedChats.push({
+                        filename: `Chat_${i+1}_${getDomainStr(url)}.txt`,
+                        content: data
+                    });
+
+                    logItem.innerHTML = `<svg class="w-4 h-4 text-green-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> <span class="text-green-600 font-medium">Thành công:</span> <span class="truncate max-w-[200px] text-gray-500">${url}</span>`;
+                } catch (error) {
+                    logItem.innerHTML = `<svg class="w-4 h-4 text-red-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg> <span class="text-red-600 font-medium">Lỗi:</span> <span class="truncate max-w-[200px] text-gray-500">${url}</span>`;
+                }
+            }
+
+            // Khôi phục nút bấm
+            processBtn.innerHTML = 'Trích xuất nội dung';
+            processBtn.disabled = false;
+            processBtn.classList.remove('opacity-70');
+
+            // Hiển thị nút tải về nếu có dữ liệu
+            if (extractedChats.length > 0) {
+                downloadArea.classList.remove('hidden');
+                
+                // Cuộn mượt xuống khu vực tải về
+                setTimeout(() => {
+                    downloadArea.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                }, 100);
+            }
+        }
+
+        // Hàm giả lập việc cào dữ liệu (Vì frontend không thể cào do lỗi CORS)
+        function mockFetchChatData(url, index) {
+            return new Promise((resolve) => {
+                const delay = Math.floor(Math.random() * 1000) + 500; // Giả lập mạng chậm 0.5s - 1.5s
+                setTimeout(() => {
+                    const mockContent = `LỊCH SỬ CHAT AI\nNguồn: ${url}\nNgày trích xuất: ${new Date().toLocaleString('vi-VN')}\n\n=================================\n\nUser: Xin chào, đây là nội dung test từ link số ${index}.\n\nAI: Chào bạn! Đây là nội dung giả lập do trình duyệt không thể trực tiếp cào dữ liệu chéo trang (CORS). Bạn cần kết nối giao diện này với một Backend API thực tế.\n\nUser: Cảm ơn nhé.\n\nAI: Không có chi!`;
+                    resolve(mockContent);
+                }, delay);
+            });
+        }
+
+        // Lấy tên miền để đặt tên file
+        function getDomainStr(url) {
+            try {
+                const domain = new URL(url).hostname;
+                return domain.replace('www.', '').split('.')[0];
+            } catch (e) {
+                return 'unknown';
+            }
+        }
+
+        // --- TÍNH NĂNG TẢI FILE ZIP ---
+        async function downloadZip() {
+            if (extractedChats.length === 0) return;
+            
+            const zip = new JSZip();
+            
+            // Thêm từng file text vào thư mục của zip
+            extractedChats.forEach(chat => {
+                zip.file(chat.filename, chat.content);
+            });
+
+            // Tạo file zip
+            try {
+                const content = await zip.generateAsync({type: "blob"});
+                triggerDownload(content, `AI_Chats_${new Date().getTime()}.zip`);
+            } catch (err) {
+                alert("Có lỗi xảy ra khi tạo file ZIP: " + err);
+            }
+        }
+
+        // --- TÍNH NĂNG TẢI TỪNG FILE ---
+        function downloadIndividualFiles() {
+            if (extractedChats.length === 0) return;
+
+            let delay = 0;
+            extractedChats.forEach(chat => {
+                // Tạo độ trễ nhỏ giữa các lần tải để tránh bị trình duyệt chặn pop-up block
+                setTimeout(() => {
+                    const blob = new Blob([chat.content], { type: 'text/plain;charset=utf-8' });
+                    triggerDownload(blob, chat.filename);
+                }, delay);
+                delay += 300; 
+            });
+        }
+
+        // Hàm hỗ trợ kích hoạt tải file trên trình duyệt
+        function triggerDownload(blob, filename) {
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            
+            // Dọn dẹp bộ nhớ
+            setTimeout(() => {
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+            }, 100);
+        }
+    </script>
+</body>
+</html>
+
